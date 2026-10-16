@@ -52,7 +52,7 @@ fromager \
   --sdists-repo="$OUTDIR/sdists-repo" \
   --wheels-repo="$OUTDIR/wheels-repo" \
   --work-dir="$OUTDIR/work-dir" \
-  --settings-file="$SCRIPTDIR/bootstrap_settings.yaml" \
+  --settings-dir="$SCRIPTDIR/changelog_settings" \
   bootstrap --cache-wheel-server-url=$WHEEL_SERVER_URL 'stevedore==5.2.0'
 
 if ! grep -q "stevedore-5.2.0: found built wheel on cache server" "$LOGFILE"; then
@@ -74,7 +74,7 @@ fromager \
   --sdists-repo="$OUTDIR/sdists-repo" \
   --wheels-repo="$OUTDIR/wheels-repo" \
   --work-dir="$OUTDIR/work-dir" \
-  --settings-file="$SCRIPTDIR/bootstrap_settings.yaml" \
+  --settings-dir="$SCRIPTDIR/changelog_settings" \
   bootstrap --cache-wheel-server-url=$WHEEL_SERVER_URL 'stevedore==5.2.0'
 
 if ! grep -q "stevedore-5.2.0: found existing wheel " "$LOGFILE"; then
