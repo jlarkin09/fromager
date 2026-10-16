@@ -534,3 +534,89 @@ class TestGetBuildTag:
         )
         assert result == ()
         assert calls == []
+
+
+@pytest.mark.parametrize(
+    ("candidate_build_tag", "matches"),
+    [
+        ((), True),
+        ((0, ""), True),
+        ((0, "other"), False),
+        ((1, "other"), False),
+    ],
+)
+def test_matches_expected_build_tag_without_changelog(
+    tmp_path: pathlib.Path,
+    candidate_build_tag: tuple[int, str] | tuple[()],
+    matches: bool,
+) -> None:
+    """An empty source tag accepts only an untagged or build-zero wheel."""
+    ctx = _ctx_with_hook(tmp_path)
+
+    result = wheels.matches_expected_build_tag(
+        ctx=ctx,
+        req=Requirement("mypkg"),
+        version=Version("1.0"),
+        wheel_tags=frozenset({Tag("py3", "none", "any")}),
+        candidate_build_tag=candidate_build_tag,
+    )
+
+    assert result is matches
+
+
+def test_matches_expected_build_tag_rejects_higher_number(
+    tmp_path: pathlib.Path,
+) -> None:
+    """A higher build number with the same suffix is a changelog error."""
+    ctx = _ctx_with_hook(tmp_path)
+
+    with pytest.raises(ValueError, match=r"changelog.*inconsistent"):
+        wheels.matches_expected_build_tag(
+            ctx=ctx,
+            req=Requirement("mypkg"),
+            version=Version("1.0"),
+            wheel_tags=frozenset({Tag("py3", "none", "any")}),
+            candidate_build_tag=(1, ""),
+        )
+
+
+def test_matches_expected_build_tag_uses_version_specific_prebuilt_setting(
+    tmp_path: pathlib.Path,
+) -> None:
+    """A version marked prebuilt accepts its publisher's build number."""
+    ctx = _ctx_with_hook(tmp_path)
+    version = Version("1.0")
+    pbi = Mock(pre_built=False, source_resolver=None)
+    pbi.is_pre_built.return_value = True
+
+    with patch.object(ctx, "package_build_info", return_value=pbi):
+        result = wheels.matches_expected_build_tag(
+            ctx=ctx,
+            req=Requirement("mypkg"),
+            version=version,
+            wheel_tags=frozenset({Tag("py3", "none", "any")}),
+            candidate_build_tag=(2, ""),
+        )
+
+    assert result
+    pbi.is_pre_built.assert_called_once_with(version)
+
+
+def test_matches_expected_build_tag_uses_source_resolver_kind(
+    tmp_path: pathlib.Path,
+) -> None:
+    """A configured prebuilt resolver accepts the publisher's build number."""
+    ctx = _ctx_with_hook(tmp_path)
+    pbi = Mock(pre_built=False)
+    pbi.source_resolver.resolves_prebuilt_wheel = True
+
+    with patch.object(ctx, "package_build_info", return_value=pbi):
+        result = wheels.matches_expected_build_tag(
+            ctx=ctx,
+            req=Requirement("mypkg"),
+            version=Version("1.0"),
+            wheel_tags=frozenset({Tag("py3", "none", "any")}),
+            candidate_build_tag=(2, ""),
+        )
+
+    assert result

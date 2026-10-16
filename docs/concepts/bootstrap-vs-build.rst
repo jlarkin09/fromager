@@ -97,6 +97,19 @@ The ``build-sequence`` and ``build-parallel`` commands bridge these modes by rea
 a ``build-order.json`` file (produced by bootstrap) and invoking the build logic
 for each package in the specified order.
 
+Wheel Cache Selection
+---------------------
+
+Both modes apply the same build-tag rule when reusing a source-built wheel.
+An empty expected tag matches an untagged wheel or build ``0``. A different
+tag is a cache miss, except a higher build number with the expected suffix
+raises a changelog error. Prebuilt packages accept the publisher's build tag
+without comparing it to the Fromager changelog.
+
+.. versionchanged:: 0.102.0
+
+   Build and bootstrap use the same build-tag acceptance rule.
+
 Typical Workflow
 ----------------
 

@@ -94,26 +94,30 @@ def _look_for_existing_wheel(
         downloads_dir=search_in,
         req=req,
         dist_version=str(resolved_version),
-        build_tag=base_build_tag,
     )
+    matching_wheel: pathlib.Path | None = None
     for wheel_filename in wheel_filenames:
         _, _, actual_build_tag, wheel_tags = wheels.extract_info_from_wheel_file(
             req, wheel_filename
         )
-        expected_build_tag = wheels.get_build_tag(
-            ctx=ctx, req=req, version=resolved_version, wheel_tags=wheel_tags
-        )
-        if expected_build_tag and expected_build_tag != actual_build_tag:
-            logger.info(
-                f"found wheel for {resolved_version} in {wheel_filename} but build tag does not match. Got {actual_build_tag} but expected {expected_build_tag}"
-            )
+        if not wheels.matches_expected_build_tag(
+            ctx=ctx,
+            req=req,
+            version=resolved_version,
+            wheel_tags=wheel_tags,
+            candidate_build_tag=actual_build_tag,
+        ):
             continue
-        logger.info(f"found existing wheel {wheel_filename}")
-        build_reqs_dir = _extract_build_reqs_from_wheel(
-            ctx.work_dir, req, resolved_version, wheel_filename
-        )
-        return wheel_filename, build_reqs_dir
-    return None, None
+        if matching_wheel is None:
+            matching_wheel = wheel_filename
+
+    if matching_wheel is None:
+        return None, None
+    logger.info(f"found existing wheel {matching_wheel}")
+    build_reqs_dir = _extract_build_reqs_from_wheel(
+        ctx.work_dir, req, resolved_version, matching_wheel
+    )
+    return matching_wheel, build_reqs_dir
 
 
 def _download_wheel_from_cache(
@@ -160,18 +164,13 @@ def _download_wheel_from_cache(
             logger.warning(f"could not parse cached wheel {wheel_url}: {err}")
             continue
 
-        pbi = ctx.package_build_info(req)
-        expected_build_tag = wheels.get_build_tag(
-            ctx=ctx, req=req, version=resolved_version, wheel_tags=wheel_tags
-        )
-        logger.info(f"has expected build tag {expected_build_tag}")
-        changelogs = pbi.get_changelog(resolved_version)
-        logger.debug(f"has change logs {changelogs}")
-
-        if expected_build_tag and expected_build_tag != actual_build_tag:
-            logger.info(
-                f"found wheel for {resolved_version} in cache but build tag does not match. Got {actual_build_tag} but expected {expected_build_tag}"
-            )
+        if not wheels.matches_expected_build_tag(
+            ctx=ctx,
+            req=req,
+            version=resolved_version,
+            wheel_tags=wheel_tags,
+            candidate_build_tag=actual_build_tag,
+        ):
             continue
 
         try:

@@ -569,6 +569,43 @@ def test_cache_lookup_checks_all_remote_build_tags(
     )
 
 
+def test_cache_lookup_rejects_higher_local_build_tag(
+    tmp_context: WorkContext,
+) -> None:
+    """A higher local build fails even when a matching wheel sorts first."""
+    req = Requirement("test-pkg")
+    version = Version("1.0.0")
+    matching = tmp_context.wheels_build / "test_pkg-1.0.0-0-py3-none-any.whl"
+    wheel_filename = tmp_context.wheels_build / "test_pkg-1.0.0-1-py3-none-any.whl"
+    matching.touch()
+    wheel_filename.touch()
+
+    with pytest.raises(ValueError, match=r"changelog.*inconsistent"):
+        _look_for_existing_wheel(tmp_context, req, version, tmp_context.wheels_build)
+
+
+def test_cache_lookup_rejects_higher_remote_build_tag(
+    tmp_context: WorkContext,
+) -> None:
+    """A higher remote build number fails before downloading the wheel."""
+    req = Requirement("test-pkg")
+    version = Version("1.0.0")
+    cache_url = "https://cache.test/simple"
+    wheel_url = f"{cache_url}/test_pkg-1.0.0-1-py3-none-any.whl"
+
+    with (
+        patch(
+            "fromager.resolver.find_all_matching_from_provider",
+            return_value=[(wheel_url, version)],
+        ),
+        patch("fromager.wheels.download_wheel") as download,
+        pytest.raises(ValueError, match=r"changelog.*inconsistent"),
+    ):
+        _download_wheel_from_cache(tmp_context, cache_url, req, version)
+
+    download.assert_not_called()
+
+
 def test_cache_lookup_propagates_build_tag_hook_error(
     testdata_context: WorkContext,
 ) -> None:

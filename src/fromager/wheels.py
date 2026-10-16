@@ -103,6 +103,67 @@ def get_build_tag(
     return (base_tag[0], suffix)
 
 
+def matches_expected_build_tag(
+    *,
+    ctx: context.WorkContext,
+    req: Requirement,
+    version: Version,
+    wheel_tags: frozenset[Tag],
+    candidate_build_tag: BuildTag,
+) -> bool:
+    """Check a candidate wheel's build tag against the package settings.
+
+    Prebuilt packages keep the publisher's build tag. A configured source
+    resolver determines whether its wheels are prebuilt; otherwise, package
+    settings determine this for the resolved version. For source builds, an
+    empty tag means build zero. A higher build number with the expected suffix
+    indicates an inconsistent changelog and raises ``ValueError``. Other
+    mismatches are cache misses.
+
+    Args:
+        ctx: Work context containing package and hook settings.
+        req: Requirement for the candidate wheel.
+        version: Resolved package version.
+        wheel_tags: Tags from the candidate wheel filename.
+        candidate_build_tag: Build tag from the candidate wheel filename.
+
+    Returns:
+        Whether the candidate build tag is acceptable.
+
+    Raises:
+        ValueError: The candidate has a higher build number with the
+            expected suffix, or the build tag hook returns invalid data.
+    """
+    pbi = ctx.package_build_info(req)
+    source_resolver = getattr(pbi, "source_resolver", None)
+    if source_resolver is not None:
+        if source_resolver.resolves_prebuilt_wheel:
+            return True
+    else:
+        is_pre_built = getattr(pbi, "is_pre_built", None)
+        pre_built = is_pre_built(version) if is_pre_built is not None else pbi.pre_built
+        if pre_built:
+            return True
+
+    expected_tag = get_build_tag(
+        ctx=ctx, req=req, version=version, wheel_tags=wheel_tags
+    ) or (0, "")
+    actual_tag = candidate_build_tag or (0, "")
+    if actual_tag[0] > expected_tag[0] and actual_tag[1] == expected_tag[1]:
+        raise ValueError(
+            f"{req.name}: changelog for version {version} is inconsistent. "
+            f"Found build tag {actual_tag} but expected {expected_tag}"
+        )
+    if actual_tag != expected_tag:
+        logger.info(
+            "candidate wheel build tag %s does not match expected build tag %s",
+            actual_tag,
+            expected_tag,
+        )
+        return False
+    return True
+
+
 def _log_existing_sboms(
     req: Requirement,
     dist_info_dir: pathlib.Path,
